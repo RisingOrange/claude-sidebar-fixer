@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Claude Sidebar Controller
+// @name         Claude Sidebar Fixer
 // @namespace    http://tampermonkey.net/
 // @version      1.1
 // @description  Hides Claude's sidebar by default and adds a toggle button in the top-left corner
@@ -62,6 +62,21 @@
     // Track sidebar visibility state
     let sidebarVisible = false;
 
+    // Function to check if sidebar is currently pinned by checking the pin button's SVG path
+    function isSidebarPinned() {
+        const pinButton = document.querySelector('[data-testid="pin-sidebar-toggle"]');
+        if (!pinButton) return false;
+
+        // Get the SVG path inside the pin button
+        const svgPath = pinButton.querySelector('svg path');
+        if (!svgPath) return false;
+
+        // The "unpinned" state SVG path starts with "M189.66"
+        // The "pinned" state SVG path starts with "M232"
+        const pathData = svgPath.getAttribute('d');
+        return pathData && pathData.startsWith('M232');
+    }
+
     // Function to toggle sidebar visibility
     function toggleSidebar() {
         // Get the sidebar element
@@ -78,11 +93,16 @@
             sidebar.classList.remove('sidebar-visible');
         }
 
-        // Always click Claude's pin button when we toggle our sidebar
-        const pinButton = document.querySelector('[data-testid="pin-sidebar-toggle"]');
-        if (pinButton) {
-            // Directly click the pin button every time
-            pinButton.click();
+        // Check current pin state
+        const currentlyPinned = isSidebarPinned();
+        const shouldBePinned = sidebarVisible;
+
+        // Only click the pin button if the pin state needs to change
+        if (currentlyPinned !== shouldBePinned) {
+            const pinButton = document.querySelector('[data-testid="pin-sidebar-toggle"]');
+            if (pinButton) {
+                pinButton.click();
+            }
         }
 
         // Update toggle button appearance
@@ -90,6 +110,34 @@
         if (btn) {
             btn.innerHTML = sidebarVisible ? '&larr;' : '&rarr;';
             btn.title = sidebarVisible ? 'Hide Sidebar' : 'Show Sidebar';
+        }
+    }
+
+    // Function to ensure the sidebar is hidden and unpinned
+    function hideSidebar() {
+        // Get the sidebar element
+        const sidebar = document.querySelector('nav[data-testid="menu-sidebar"]');
+        if (!sidebar) return;
+
+        // Set our state to hidden
+        sidebarVisible = false;
+
+        // Apply our class to hide it
+        sidebar.classList.remove('sidebar-visible');
+
+        // Only click the pin button if currently pinned
+        if (isSidebarPinned()) {
+            const pinButton = document.querySelector('[data-testid="pin-sidebar-toggle"]');
+            if (pinButton) {
+                pinButton.click();
+            }
+        }
+
+        // Update toggle button appearance
+        const btn = document.getElementById('manual-sidebar-toggle');
+        if (btn) {
+            btn.innerHTML = '&rarr;';
+            btn.title = 'Show Sidebar';
         }
     }
 
@@ -111,6 +159,75 @@
         return btn;
     }
 
+    // Function to ensure the sidebar is unpinned when clicking "New chat"
+    function setupNewChatButton() {
+        // Add click listeners to any "New chat" buttons
+        const newChatButtonSelector = 'a[href="/new"]';
+
+        // Use delegation for dynamically added elements
+        document.addEventListener('click', function(e) {
+            // Check if the clicked element or any of its parents match our selector
+            let target = e.target;
+            while (target && target !== document) {
+                if (target.matches && target.matches(newChatButtonSelector)) {
+                    // Hide sidebar and ensure it's unpinned
+                    hideSidebar();
+                    break;
+                }
+                target = target.parentElement;
+            }
+        }, true);
+    }
+
+    // Function to handle clicks on suggested/history chats
+    function setupChatNavigationHandlers() {
+        // This handles clicks on conversation history items and suggested chats
+        document.addEventListener('click', function(e) {
+            // Look for chat list items or suggested chat links
+            let target = e.target;
+            while (target && target !== document) {
+                // Match any links that point to chat URLs but NOT new chat
+                if (target.tagName === 'A' &&
+                    target.href &&
+                    (target.href.includes('/chat/') ||
+                     target.href.includes('/c/') ||
+                     target.href.includes('/explore/')) &&
+                    !target.href.includes('/new')) {
+
+                    // Ensure sidebar is hidden and layout is correct
+                    hideSidebar();
+                    break;
+                }
+                target = target.parentElement;
+            }
+        }, true);
+    }
+
+    // Track URL changes to handle navigation through the app
+    function setupNavigationObserver() {
+        // Create a MutationObserver to watch for DOM changes that might indicate navigation
+        const observer = new MutationObserver((mutations) => {
+            // Check if we should adjust the sidebar
+            if (document.location.pathname.includes('/c/') ||
+                document.location.pathname.includes('/chat/') ||
+                document.location.pathname.includes('/explore/')) {
+
+                // Small delay to let the UI update
+                setTimeout(() => {
+                    if (isSidebarPinned() !== sidebarVisible) {
+                        hideSidebar();
+                    }
+                }, 100);
+            }
+        });
+
+        // Start observing changes to the document body or the root element
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+    }
+
     // Function to initialize everything
     function initialize() {
         const btn = createToggleButton();
@@ -122,6 +239,11 @@
             sidebar.classList.remove('sidebar-visible');
             sidebarVisible = false;
         }
+
+        // Set up all our event handlers
+        setupNewChatButton();
+        setupChatNavigationHandlers();
+        setupNavigationObserver();
 
         // Set up observer to ensure our button persists
         const observer = new MutationObserver(() => {
