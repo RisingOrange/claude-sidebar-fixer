@@ -32,6 +32,11 @@
             transform: translateX(0%) !important;
         }
 
+        /* Move the Claude logo to the right to make room for our toggle button */
+        a[href="/new"] svg.h-4 {
+            margin-left: 50px !important;
+        }
+
         /* Toggle button styling */
         #manual-sidebar-toggle {
             position: fixed;
