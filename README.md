@@ -1,4 +1,6 @@
-# Claude Sidebar Fixer
+# Claude Sidebar Fixer (outdated)
+
+**Anthropic has fixed Claude's sidebar and this is now obsolete.**
 
 A userscript that fixes Claude AI's sidebar behavior by hiding it by default and adding a toggle button in the top-left corner - similar to ChatGPT's sidebar behavior.
 
